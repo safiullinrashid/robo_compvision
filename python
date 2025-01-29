@@ -1,0 +1,123 @@
+import cv2
+import numpy as np
+import random
+import serial
+import time
+
+# Настройки для подключения к Arduino
+SERIAL_PORT = 'COM9'  # Убедитесь, что это правильный порт
+BAUD_RATE = 115200
+
+# Начальные положения сервоприводов
+INITIAL_ANGLE_1 = 0
+INITIAL_ANGLE_2 = 45
+INITIAL_ANGLE_3 = 135
+
+# Подключение к Arduino
+def connect_to_arduino():
+    try:
+        ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+        time.sleep(2)  # Даем время для установления соединения
+        print(f"Подключено к порту: {SERIAL_PORT} с baud rate {BAUD_RATE}")
+        return ser
+    except serial.SerialException as e:
+        print(f"Ошибка подключения к последовательному порту: {e}")
+        return None
+
+# Отправка команды на Arduino
+def send_command(ser, command):
+    if ser and ser.is_open:
+        ser.write(f"{command}\n".encode())
+        response = ser.readline().decode().strip()
+        if response == "OK":
+            print(f"Команда выполнена: {command}")
+        else:
+            print(f"Ошибка: {response}")
+    else:
+        print("Ошибка: Порт не подключен.")
+
+# Имитация движения сервоприводов
+def simulate_servo_movement(ser, answer):
+    if answer == "да":
+        # Движение для ответа "да"
+        send_command(ser, f"MOVE 1 {INITIAL_ANGLE_1 + 15}")  # Двигаем сервопривод 1 на +15°
+        time.sleep(0.5)  # Задержка для завершения движения
+        send_command(ser, f"MOVE 1 {INITIAL_ANGLE_1}")  # Возвращаем сервопривод 1 в исходное положение
+    elif answer == "нет":
+        # Движение для ответа "нет"
+        send_command(ser, f"MOVE 3 150")  # Двигаем сервопривод 3 на 150°
+        time.sleep(0.5)  # Задержка для завершения движения
+        send_command(ser, f"MOVE 3 120")  # Двигаем сервопривод 3 на 120°
+        time.sleep(0.5)  # Задержка для завершения движения
+        send_command(ser, f"MOVE 3 135")  # Возвращаем сервопривод 3 в исходное положение
+
+# Основной код
+def main():
+    # Подключение к Arduino
+    ser = connect_to_arduino()
+    if not ser:
+        return
+
+    # Инициализация камеры
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Ошибка: Не удалось открыть камеру.")
+        return
+
+    # Загрузка классификатора для распознавания лиц
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Ошибка: Не удалось получить кадр с камеры.")
+            break
+
+        # Преобразуем кадр в черно-белый для распознавания лиц
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+
+        # Рисуем прямоугольник вокруг лица и выводим сообщение
+        for (x, y, w, h) in faces:
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            face_center = (x + w // 2, y + h // 2)
+            frame_center = (frame.shape[1] // 2, frame.shape[0] // 2)
+
+            # Если лицо в центре экрана
+            if abs(face_center[0] - frame_center[0]) < 50 and abs(face_center[1] - frame_center[1]) < 50:
+                cv2.putText(frame, "Please press enter to start", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+                # Ожидание нажатия Enter
+                if cv2.waitKey(1) == 13:  # 13 - код клавиши Enter
+                    print("Слушаю ваш вопрос на который можно ответить только да/нет")
+                    input("Нажмите Enter после того, как зададите вопрос...")
+
+                    # Рандомный ответ
+                    answer = random.choice(["да", "нет"])
+                    print(f"Ответ: {answer}")
+
+                    # Имитация движения сервоприводов
+                    simulate_servo_movement(ser, answer)
+
+                    # Сообщение для следующего вопроса
+                    print("Чтобы задать следующий вопрос, нажмите Enter.")
+
+                    # Ожидание нажатия Enter для следующего вопроса
+                    input("Нажмите Enter, чтобы задать вопрос...")
+
+        # Отображение кадра
+        cv2.imshow("Camera", frame)
+
+        # Выход по нажатию клавиши 'q'
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    # Освобождение ресурсов
+    cap.release()
+    cv2.destroyAllWindows()
+    if ser:
+        ser.close()
+
+if __name__ == "__main__":
+    main()
