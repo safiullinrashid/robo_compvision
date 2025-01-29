@@ -1,0 +1,94 @@
+#include <ServoEasing.hpp>
+
+// Пины для подключения сервоприводов
+#define SERVO_PIN1 2
+#define SERVO_PIN2 3
+#define SERVO_PIN3 4
+
+// Начальные положения сервоприводов
+#define INITIAL_ANGLE_1 0
+#define INITIAL_ANGLE_2 45
+#define INITIAL_ANGLE_3 135
+
+// Создаем объекты для управления сервоприводами
+ServoEasing servo1;
+ServoEasing servo2;
+ServoEasing servo3;
+
+// Функция для инициализации сервоприводов
+void initializeServos() {
+  servo1.attach(SERVO_PIN1);
+  servo2.attach(SERVO_PIN2);
+  servo3.attach(SERVO_PIN3);
+
+  // Устанавливаем начальные положения
+  servo1.write(INITIAL_ANGLE_1);
+  servo2.write(INITIAL_ANGLE_2);
+  servo3.write(INITIAL_ANGLE_3);
+
+  // Настройка плавности движения
+  servo1.setEasingType(EASE_CUBIC_IN_OUT);
+  servo2.setEasingType(EASE_CUBIC_IN_OUT);
+  servo3.setEasingType(EASE_CUBIC_IN_OUT);
+
+  servo1.setSpeed(100);  // Скорость движения сервопривода 1
+  servo2.setSpeed(70);  // Скорость движения сервопривода 2
+  servo3.setSpeed(100);  // Скорость движения сервопривода 3
+}
+
+// Функция для обработки команды
+void processCommand(const String& command) {
+  if (command.startsWith("MOVE")) {
+    // Разбираем команду: MOVE <номер сервопривода> <угол>
+    int servoNumber = command.substring(5, 6).toInt();
+    int angle = command.substring(7).toInt();
+
+    // Выбираем сервопривод и двигаем его
+    switch (servoNumber) {
+      case 1:
+        servo1.startEaseTo(angle);
+        break;
+      case 2:
+        servo2.startEaseTo(angle);
+        break;
+      case 3:
+        servo3.startEaseTo(angle);
+        break;
+      default:
+        Serial.println("Ошибка: Неверный номер сервопривода.");
+        return;
+    }
+
+    // Ожидаем завершения движения
+    while (servo1.isMoving() || servo2.isMoving() || servo3.isMoving()) {
+      delay(10);
+    }
+
+    // Отправляем подтверждение
+    Serial.println("OK");
+  } else {
+    Serial.println("Ошибка: Неизвестная команда.");
+  }
+}
+
+void setup() {
+  // Инициализация последовательного порта
+  Serial.begin(115200);
+
+  // Инициализация сервоприводов
+  initializeServos();
+
+  // Вывод сообщения о готовности
+  Serial.println("Робот готов к работе.");
+}
+
+void loop() {
+  // Ожидание команды от Python-скрипта
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();  // Убираем лишние пробелы и символы
+
+    // Обработка команды
+    processCommand(command);
+  }
+}
